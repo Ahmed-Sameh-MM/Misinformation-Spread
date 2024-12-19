@@ -1,29 +1,41 @@
+import random
+
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
-from agent_state import AgentState
 
-# Parameters
-α = 0.5  # Credibility of the hoax (0 ≤ α < 1)
-β = 0.5  # Spreading rate of hoax/fact-checking
-pv = 0.3  # Verification probability
-pf = 0.1  # Forgetting probability
-NUM_AGENTS = 50  # Total number of agents
-NUM_STEPS = 10  # Number of simulation steps
+from agent import Agent
+from agent_state import AgentState
+from constants import *
+
+# social_network = nx.barabasi_albert_graph(NUM_AGENTS, 3)
 
 # Initialize the network
-social_network = nx.barabasi_albert_graph(NUM_AGENTS, 3)  # Barabasi-Albert social network
-states = {node: AgentState.SUSCEPTIBLE for node in social_network.nodes()}  # Initial state: all Susceptible
+social_network = nx.Graph()
+
+# Add NUM_PEOPLE as agents
+agents = [Agent(id=(i - 1), name=f'A{i}') for i in range(1, NUM_AGENTS + 1)]
+social_network.add_nodes_from(agents)
+
+# Add random edges to simulate friendships
+# Assuming each agent has 1-NUM_FRIENDS random connections
+for agent in agents:
+    num_connections = random.randint(1, NUM_CONNECTIONS + 1)
+    connections = random.sample(agents, num_connections)
+
+    for connection in connections:
+        if agent != connection:  # Avoid self-loops
+            social_network.add_edge(agent, connection)
 
 # Seed the network with initial believers
-initial_believers = np.random.choice(list(social_network.nodes()), size=10, replace=False)
-for node in initial_believers:
-    states[node] = AgentState.BELIEVER
+initial_believers = np.random.choice(list(agents), size=NUM_OF_INITIAL_BELIEVERS, replace=False)
 
+for believer in initial_believers:
+    agents[believer.id].set_state(AgentState.BELIEVER)
 
-# Function to count neighbors in a given state
-def count_neighbors_in_state(node, state):
-    return sum(1 for neighbor in social_network.neighbors(node) if states[neighbor] == state)
+# Function to count neighbours in a given state
+def count_neighbors_in_state(agent: Agent, state: AgentState):
+    return sum(1 for neighbour in social_network.neighbors(agent) if agents[neighbour.id].get_state() == state)
 
 # Display basic graph info
 print("Number of Agents:", social_network.number_of_nodes(), ',' ,end = ' ')
@@ -31,12 +43,14 @@ print("Number of Connections:", social_network.number_of_edges())
 
 # Simulation loop
 for step in range(NUM_STEPS):
-    new_states = states.copy()  # To update states simultaneously
+    updated_agents = agents.copy() # To update agent states simultaneously
 
-    for node in social_network.nodes():
-        if states[node] == AgentState.SUSCEPTIBLE:  # Susceptible
-            n_B = count_neighbors_in_state(node, AgentState.BELIEVER)
-            n_FC = count_neighbors_in_state(node, AgentState.FACT_CHECKER)
+    for agent in agents:
+        agent_id = agent.id
+
+        if agents[agent_id].get_state() == AgentState.SUSCEPTIBLE:  # Susceptible
+            n_B = count_neighbors_in_state(agent, AgentState.BELIEVER)
+            n_FC = count_neighbors_in_state(agent, AgentState.FACT_CHECKER)
             denom = n_B * (1 + α) + n_FC * (1 - α)
 
             # Compute probabilities of transitioning to B or FC
@@ -45,32 +59,33 @@ for step in range(NUM_STEPS):
 
             # Decide state change
             rand = np.random.rand()
+
             if rand < f_B:
-                new_states[node] = AgentState.BELIEVER
+                updated_agents[agent_id].set_state(AgentState.BELIEVER)
+
             elif rand < f_B + f_FC:
-                new_states[node] = AgentState.FACT_CHECKER
+                updated_agents[agent_id].set_state(AgentState.FACT_CHECKER)
 
-        elif states[node] == AgentState.BELIEVER:  # Believer
+        elif agents[agent_id].get_state() == AgentState.BELIEVER:  # Believer
             if np.random.rand() < pv:
-                new_states[node] = AgentState.FACT_CHECKER  # Verify the hoax
+                updated_agents[agent_id].set_state(AgentState.FACT_CHECKER)  # Verify the hoax
+
             elif np.random.rand() < pf:
-                new_states[node] = AgentState.SUSCEPTIBLE  # Forget and become Susceptible
+                updated_agents[agent_id].set_state(AgentState.SUSCEPTIBLE)  # Forget and become Susceptible
 
-        elif states[node] == AgentState.FACT_CHECKER:  # FactChecker
+        elif agents[agent_id].get_state() == AgentState.FACT_CHECKER:  # FactChecker
             if np.random.rand() < pf:
-                new_states[node] = AgentState.SUSCEPTIBLE  # Forget and become Susceptible
+                updated_agents[agent_id].set_state(AgentState.SUSCEPTIBLE)  # Forget and become Susceptible
 
-    # Update states
-    states = new_states.copy()
+    # Update the states of the agents
+    agents = updated_agents.copy()
 
-    # Visualization
-    colors = {
-        AgentState.SUSCEPTIBLE: "gray",
-        AgentState.BELIEVER: "red",
-        AgentState.FACT_CHECKER: "green",
-    }
-    node_colors = [colors[states[node]] for node in social_network.nodes()]
+    # Graph Visualization
+    node_colors = [agent.node_color for agent in agents]
 
-    nx.draw(social_network, node_color=node_colors, with_labels=False, node_size=50)
-    plt.title(f"Step {step + 1}")
+    pos = nx.spring_layout(social_network, seed=42)  # Layout for visualization
+
+    plt.figure(figsize=FIG_SIZE)
+    nx.draw(social_network, pos, node_color=node_colors, with_labels=True, node_size=300, font_size=8, edge_color="gray")
+    plt.title(f"Step {step + 1}", fontsize=15)
     plt.show()
