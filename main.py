@@ -8,13 +8,14 @@ from agent import Agent
 from agent_state import AgentState
 from constants import *
 
-# social_network = nx.barabasi_albert_graph(NUM_AGENTS, 3)
-
 # Initialize the network
+# social_network = nx.barabasi_albert_graph(NUM_AGENTS, 3)
 social_network = nx.Graph()
 
+# print(social_network.nodes())
+
 # Add NUM_PEOPLE as agents
-agents = [Agent(id=(i - 1), name=f'A{i}') for i in range(1, NUM_AGENTS + 1)]
+agents = [Agent(id=i) for i in range(NUM_AGENTS)]
 social_network.add_nodes_from(agents)
 
 # Add random edges to simulate friendships
@@ -63,7 +64,7 @@ for step in range(NUM_STEPS):
             if rand < f_B:
                 updated_agents[agent_id].set_state(AgentState.BELIEVER)
 
-            elif rand < f_B + f_FC:
+            elif rand < f_FC: # TODO check this transition to be correct or not
                 updated_agents[agent_id].set_state(AgentState.FACT_CHECKER)
 
         elif agents[agent_id].get_state() == AgentState.BELIEVER:  # Believer
