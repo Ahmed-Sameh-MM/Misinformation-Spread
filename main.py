@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 
 from agent import Agent
 from agent_state import AgentState
+from agent_socio_emotional_classes import *
 from constants import *
 
 # Initialize the network
@@ -15,7 +16,14 @@ social_network = nx.Graph()
 # print(social_network.nodes())
 
 # Add NUM_PEOPLE as agents
-agents = [Agent(id=i) for i in range(NUM_AGENTS)]
+agents = []
+
+for i in range(NUM_AGENTS):
+    agents.append(Agent(
+        id=i,
+        socio_emotional_class=HighEducationHighEmotional(),
+    ))
+
 social_network.add_nodes_from(agents)
 
 # Add random edges to simulate friendships
@@ -49,32 +57,58 @@ for step in range(NUM_STEPS):
     for agent in agents:
         agent_id = agent.id
 
-        if agents[agent_id].get_state() == AgentState.SUSCEPTIBLE:  # Susceptible
+        if agent.get_state() == AgentState.SUSCEPTIBLE:  # Susceptible
             n_B = count_neighbors_in_state(agent, AgentState.BELIEVER)
             n_FC = count_neighbors_in_state(agent, AgentState.FACT_CHECKER)
-            denom = n_B * (1 + α) + n_FC * (1 - α)
+
+            numerator_B = n_B * (1 + α)
+            numerator_FC = n_FC * (1 - α)
+            denom = numerator_B + numerator_FC
+
+            agent_education = agent.socio_emotional_class.education
+            agent_anger = agent.socio_emotional_class.anger
 
             # Compute probabilities of transitioning to B or FC
-            f_B = β * (n_B * (1 + α)) / denom if denom > 0 else 0
-            f_FC = β * (n_FC * (1 - α)) / denom if denom > 0 else 0
+            f_B = β * numerator_B / denom if denom > 0 else 0
+            f_FC = β * numerator_FC / denom if denom > 0 else 0
+
+            # Simulating the agent's trust parameter
+            agent_trust = agent.socio_emotional_class.trust
+
+            # Modify the probabilities based on the majority state of neighbors
+            if n_B > n_FC:
+                f_B *= (1 + agent_trust)
+                f_FC *= (1 - agent_trust)
+
+            elif n_FC > n_B:
+                f_FC *= (1 + agent_trust)
+                f_B *= (1 - agent_trust)
+
+            else: # Equal numbers of Believers and FactCheckers
+                pass
+
+            # After adjustments, normalize f_B & f_FC, to ensure their sum doesn't exceed 1:
+            total = f_B + f_FC
+
+            if total > 1:
+                f_B /= total
+                f_FC /= total
 
             # Decide state change
-            rand = np.random.rand()
-
-            if rand < f_B:
+            if np.random.rand() < f_B:
                 updated_agents[agent_id].set_state(AgentState.BELIEVER)
 
-            elif rand < f_FC: # TODO check this transition to be correct or not
+            elif np.random.rand() < f_FC: # TODO check this transition to be correct or not
                 updated_agents[agent_id].set_state(AgentState.FACT_CHECKER)
 
-        elif agents[agent_id].get_state() == AgentState.BELIEVER:  # Believer
+        elif agent.get_state() == AgentState.BELIEVER:  # Believer
             if np.random.rand() < pv:
                 updated_agents[agent_id].set_state(AgentState.FACT_CHECKER)  # Verify the hoax
 
             elif np.random.rand() < pf:
                 updated_agents[agent_id].set_state(AgentState.SUSCEPTIBLE)  # Forget and become Susceptible
 
-        elif agents[agent_id].get_state() == AgentState.FACT_CHECKER:  # FactChecker
+        elif agent.get_state() == AgentState.FACT_CHECKER:  # FactChecker
             if np.random.rand() < pf:
                 updated_agents[agent_id].set_state(AgentState.SUSCEPTIBLE)  # Forget and become Susceptible
 
