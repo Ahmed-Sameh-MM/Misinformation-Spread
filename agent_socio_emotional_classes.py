@@ -1,8 +1,15 @@
 class AgentSocioEmotionalClasses:
-    def __init__(self, education: float, anger:float, trust: float):
+    lowValue = 0.3
+    highValue = 0.7
+
+    def __init__(self, education: float, anger:float, trust):
         self.education = education
         self.anger = anger
-        self.trust = trust
+
+        if trust is None:
+            self.trust = round((anger + education) / 2)
+        else:
+            self.trust = trust
 
     def __str__(self):
         return f'education: {self.education}, anger({self.anger}, trust({self.trust})'
@@ -10,35 +17,31 @@ class AgentSocioEmotionalClasses:
 
 class HighEducationHighEmotional(AgentSocioEmotionalClasses):
     def __init__(self):
-        education = 0.9
-        anger=0.9
-        trust=0.9
+        education = super().highValue
+        anger = super().highValue
 
-        super().__init__(education, anger, trust)
+        super().__init__(education, anger, None)
 
 
 class LowEducationLowEmotional(AgentSocioEmotionalClasses):
     def __init__(self):
-        education = 0.1
-        anger=0.1
-        trust=0.1
+        education = super().lowValue
+        anger = super().lowValue
 
-        super().__init__(education, anger, trust)
+        super().__init__(education, anger, None)
 
 
 class HighEducationLowEmotional(AgentSocioEmotionalClasses):
     def __init__(self):
-        education = 0.9
-        anger=0.1
-        trust=0.1
+        education = super().highValue
+        anger = super().lowValue
 
-        super().__init__(education, anger, trust)
+        super().__init__(education, anger, None)
 
 
 class LowEducationHighEmotional(AgentSocioEmotionalClasses):
     def __init__(self):
-        education = 0.1
-        anger=0.9
-        trust=0.9
+        education = super().lowValue
+        anger = super().highValue
 
-        super().__init__(education, anger, trust)
+        super().__init__(education, anger, None)

@@ -1,4 +1,5 @@
 import random
+from typing import List
 
 import networkx as nx
 import numpy as np
@@ -8,6 +9,35 @@ from agent import Agent
 from agent_state import AgentState
 from agent_socio_emotional_classes import *
 from constants import *
+
+def draw_social_network_graph(agents:List[Agent], social_network, step: int):
+    if SHOW_GRAPH:
+        # Graph Visualization
+        node_colors = [agent.node_color for agent in agents]
+
+        pos = nx.spring_layout(social_network, seed=42)  # Layout for visualization
+
+        plt.figure(figsize=FIG_SIZE)
+        nx.draw(social_network, pos, node_color=node_colors, with_labels=True, node_size=300, font_size=8, edge_color="gray")
+        plt.title(f"Step {step + 1}", fontsize=15)
+        plt.show()
+
+def print_agent_states(agents: List[Agent]):
+    susceptible = 0
+    believers = 0
+    fact_checkers = 0
+
+    for agent in agents:
+        if agent.get_state() == AgentState.SUSCEPTIBLE:
+            susceptible += 1
+
+        elif agent.get_state() == AgentState.BELIEVER:
+            believers += 1
+
+        elif agent.get_state() == AgentState.FACT_CHECKER:
+            fact_checkers += 1
+
+    print(f'Susceptible: {susceptible}, believers: {believers}, fact_checkers: {fact_checkers}')
 
 # Initialize the network
 # social_network = nx.barabasi_albert_graph(NUM_AGENTS, 3)
@@ -19,9 +49,11 @@ social_network = nx.Graph()
 agents = []
 
 for i in range(NUM_AGENTS):
+    chosen_socio_emotional_class = random.choice([HighEducationHighEmotional, LowEducationLowEmotional, HighEducationLowEmotional, LowEducationHighEmotional])
+
     agents.append(Agent(
         id=i,
-        socio_emotional_class=HighEducationHighEmotional(),
+        socio_emotional_class=chosen_socio_emotional_class(),
     ))
 
 social_network.add_nodes_from(agents)
@@ -54,8 +86,11 @@ print("Number of Connections:", social_network.number_of_edges())
 for step in range(NUM_STEPS):
     updated_agents = agents.copy() # To update agent states simultaneously
 
-    for agent in agents:
-        agent_id = agent.id
+    for index, agent in enumerate(agents):
+        # Simulating the agent's anger, education, and trust parameters
+        agent_anger = agent.socio_emotional_class.anger
+        agent_education = agent.socio_emotional_class.education
+        agent_trust = agent.socio_emotional_class.trust
 
         if agent.get_state() == AgentState.SUSCEPTIBLE:  # Susceptible
             n_B = count_neighbors_in_state(agent, AgentState.BELIEVER)
@@ -65,24 +100,18 @@ for step in range(NUM_STEPS):
             numerator_FC = n_FC * (1 - α)
             denom = numerator_B + numerator_FC
 
-            agent_education = agent.socio_emotional_class.education
-            agent_anger = agent.socio_emotional_class.anger
-
             # Compute probabilities of transitioning to B or FC
             f_B = β * numerator_B / denom if denom > 0 else 0
             f_FC = β * numerator_FC / denom if denom > 0 else 0
 
-            # Simulating the agent's trust parameter
-            agent_trust = agent.socio_emotional_class.trust
-
             # Modify the probabilities based on the majority state of neighbors
             if n_B > n_FC:
-                f_B *= (1 + agent_trust)
-                f_FC *= (1 - agent_trust)
+                f_B *= (1 + agent_anger - agent_education + agent_trust)
+                f_FC *= (1 - agent_anger + agent_education - agent_trust)
 
             elif n_FC > n_B:
-                f_FC *= (1 + agent_trust)
-                f_B *= (1 - agent_trust)
+                f_B *= (1 + agent_anger - agent_education - agent_trust)
+                f_FC *= (1 - agent_anger + agent_education + agent_trust)
 
             else: # Equal numbers of Believers and FactCheckers
                 pass
@@ -96,31 +125,42 @@ for step in range(NUM_STEPS):
 
             # Decide state change
             if np.random.rand() < f_B:
-                updated_agents[agent_id].set_state(AgentState.BELIEVER)
+                updated_agents[index].set_state(AgentState.BELIEVER)
 
             elif np.random.rand() < f_FC: # TODO check this transition to be correct or not
-                updated_agents[agent_id].set_state(AgentState.FACT_CHECKER)
+                updated_agents[index].set_state(AgentState.FACT_CHECKER)
 
         elif agent.get_state() == AgentState.BELIEVER:  # Believer
+            n_B = count_neighbors_in_state(agent, AgentState.BELIEVER)
+            n_FC = count_neighbors_in_state(agent, AgentState.FACT_CHECKER)
+
+            pv = None # Verification probability
+
+            # Modify the probabilities based on the majority state of neighbors
+            if n_B > n_FC:
+                pv = agent_education - agent_anger - agent_trust
+
+            elif n_FC > n_B:
+                pv = agent_education - agent_anger + agent_trust
+
+            else:  # Equal numbers of Believers and FactCheckers
+                pv = agent_education - agent_anger
+
+            pv = pv if pv > 0 else 0
+
             if np.random.rand() < pv:
-                updated_agents[agent_id].set_state(AgentState.FACT_CHECKER)  # Verify the hoax
+                updated_agents[index].set_state(AgentState.FACT_CHECKER)  # Verify the hoax
 
             elif np.random.rand() < pf:
-                updated_agents[agent_id].set_state(AgentState.SUSCEPTIBLE)  # Forget and become Susceptible
+                updated_agents[index].set_state(AgentState.SUSCEPTIBLE)  # Forget and become Susceptible
 
         elif agent.get_state() == AgentState.FACT_CHECKER:  # FactChecker
             if np.random.rand() < pf:
-                updated_agents[agent_id].set_state(AgentState.SUSCEPTIBLE)  # Forget and become Susceptible
+                updated_agents[index].set_state(AgentState.SUSCEPTIBLE)  # Forget and become Susceptible
 
     # Update the states of the agents
     agents = updated_agents.copy()
 
-    # Graph Visualization
-    node_colors = [agent.node_color for agent in agents]
+    draw_social_network_graph(agents, social_network, step)
 
-    pos = nx.spring_layout(social_network, seed=42)  # Layout for visualization
-
-    plt.figure(figsize=FIG_SIZE)
-    nx.draw(social_network, pos, node_color=node_colors, with_labels=True, node_size=300, font_size=8, edge_color="gray")
-    plt.title(f"Step {step + 1}", fontsize=15)
-    plt.show()
+    print_agent_states(agents)
