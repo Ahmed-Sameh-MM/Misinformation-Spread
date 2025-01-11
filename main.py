@@ -10,6 +10,10 @@ from agent_state import AgentState
 from agent_socio_emotional_classes import *
 from constants import *
 
+# Function to count neighbours in a given state
+def count_neighbors_in_state(agent: Agent, state: AgentState):
+    return sum(1 for neighbour in social_network.neighbors(agent) if agents[neighbour.id].get_state() == state)
+
 def draw_social_network_graph(agents:List[Agent], social_network, step: int):
     if SHOW_GRAPH:
         # Graph Visualization
@@ -22,7 +26,26 @@ def draw_social_network_graph(agents:List[Agent], social_network, step: int):
         plt.title(f"Step {step + 1}", fontsize=15)
         plt.show()
 
-def print_agent_states(agents: List[Agent]):
+def plot_agent_states(susceptible: List[AgentState], believers: List[AgentState], fact_checkers: List[AgentState]):
+    simulation_steps = [step for step in range(NUM_STEPS + 1)]
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(simulation_steps, susceptible, label="Susceptible", color="gray", linestyle="--")
+    plt.plot(simulation_steps, believers, label="Believers", color="red", linestyle="-")
+    plt.plot(simulation_steps, fact_checkers, label="Fact Checkers", color="green", linestyle=":")
+
+    plt.xlabel("Simulation Steps")
+    plt.ylabel("Number of Agent States")
+    plt.title("Graph of Simulation Steps vs Number of Agent States")
+    plt.legend()
+
+    # Adding grid for better readability
+    plt.grid(True, linestyle='--', alpha=0.7)
+
+    # Show the plot
+    plt.show()
+
+def count_agent_states(agents: List[Agent]):
     susceptible = 0
     believers = 0
     fact_checkers = 0
@@ -39,6 +62,8 @@ def print_agent_states(agents: List[Agent]):
 
     print(f'Susceptible: {susceptible}, believers: {believers}, fact_checkers: {fact_checkers}')
 
+    return susceptible, believers, fact_checkers
+
 # Initialize the network
 # social_network = nx.barabasi_albert_graph(NUM_AGENTS, 3)
 social_network = nx.Graph()
@@ -48,21 +73,65 @@ social_network = nx.Graph()
 # Add NUM_PEOPLE as agents
 agents = []
 
-for i in range(NUM_AGENTS):
-    chosen_socio_emotional_class = random.choice([HighEducationHighEmotional, LowEducationLowEmotional, HighEducationLowEmotional, LowEducationHighEmotional])
 
-    agents.append(Agent(
-        id=i,
-        socio_emotional_class=chosen_socio_emotional_class(),
-    ))
+def generate_agents_by_percentage(percentages: dict):
+    socio_emotional_classes = [
+        HighEducationHighEmotional(),
+        LowEducationLowEmotional(),
+        HighEducationLowEmotional(),
+        LowEducationHighEmotional(),
+    ]
+
+    isRandom = True
+
+    for key, value in percentages.items():
+        if value != 0:
+            isRandom = False
+            break
+
+    if isRandom:
+        for i in range(NUM_AGENTS):
+            chosen_socio_emotional_class = random.choice(socio_emotional_classes)
+
+            agents.append(Agent(
+                id=i,
+                socio_emotional_class=chosen_socio_emotional_class,
+            ))
+
+    else:
+        # Normalize the percentages
+        normalized_percentages = {k: v / 100 for k, v in percentages.items()}
+
+        # Calculate the number of agents per class
+        class_counts = {k: int(v * NUM_AGENTS) for k, v in normalized_percentages.items()}
+
+        # Adjust for rounding errors to ensure total agents equal NUM_AGENTS
+        remaining_agents = NUM_AGENTS - sum(class_counts.values())
+
+        for _ in range(remaining_agents):
+            random_class = random.choice(list(class_counts.keys()))
+            class_counts[random_class] += 1
+
+        # Generate agents
+        id_counter = 0
+
+        for class_name, count in class_counts.items():
+            socio_emotional_class = globals()[class_name]()
+
+            for _ in range(count):
+                agents.append(Agent(
+                    id=id_counter,
+                    socio_emotional_class=socio_emotional_class,
+                ))
+                id_counter += 1
+
+generate_agents_by_percentage(SOCIO_EMOTIONAL_CLASSES_PERCENTAGES)
 
 social_network.add_nodes_from(agents)
 
-# Add random edges to simulate friendships
-# Assuming each agent has 1-NUM_FRIENDS random connections
+# Add random edges to simulate connections between agents, assuming that each agent has NUM_CONNECTIONS connections
 for agent in agents:
-    num_connections = random.randint(1, NUM_CONNECTIONS + 1)
-    connections = random.sample(agents, num_connections)
+    connections = random.sample(agents, NUM_CONNECTIONS)
 
     for connection in connections:
         if agent != connection:  # Avoid self-loops
@@ -74,17 +143,23 @@ initial_believers = np.random.choice(list(agents), size=NUM_OF_INITIAL_BELIEVERS
 for believer in initial_believers:
     agents[believer.id].set_state(AgentState.BELIEVER)
 
-# Function to count neighbours in a given state
-def count_neighbors_in_state(agent: Agent, state: AgentState):
-    return sum(1 for neighbour in social_network.neighbors(agent) if agents[neighbour.id].get_state() == state)
-
 # Display basic graph info
 print("Number of Agents:", social_network.number_of_nodes(), ',' ,end = ' ')
 print("Number of Connections:", social_network.number_of_edges())
 
+s, b, fc = count_agent_states(agents)
+
+susceptible = [s]
+believers = [b]
+fact_checkers = [fc]
+
 # Simulation loop
 for step in range(NUM_STEPS):
     updated_agents = agents.copy() # To update agent states simultaneously
+
+    s_to_b_count = 0
+    s_to_fc_count = 0
+    b_to_fc_count = 0
 
     for index, agent in enumerate(agents):
         # Simulating the agent's anger, education, and trust parameters
@@ -95,6 +170,7 @@ for step in range(NUM_STEPS):
         if agent.get_state() == AgentState.SUSCEPTIBLE:  # Susceptible
             n_B = count_neighbors_in_state(agent, AgentState.BELIEVER)
             n_FC = count_neighbors_in_state(agent, AgentState.FACT_CHECKER)
+            n_total = n_B + n_FC
 
             numerator_B = n_B * (1 + α)
             numerator_FC = n_FC * (1 - α)
@@ -104,17 +180,14 @@ for step in range(NUM_STEPS):
             f_B = β * numerator_B / denom if denom > 0 else 0
             f_FC = β * numerator_FC / denom if denom > 0 else 0
 
-            # Modify the probabilities based on the majority state of neighbors
-            if n_B > n_FC:
-                f_B *= (1 + agent_anger - agent_education + agent_trust)
-                f_FC *= (1 - agent_anger + agent_education - agent_trust)
+            believer_trust = agent_trust
+            believer_trust *= (n_B / n_total) if n_total > 0 else 0
 
-            elif n_FC > n_B:
-                f_B *= (1 + agent_anger - agent_education - agent_trust)
-                f_FC *= (1 - agent_anger + agent_education + agent_trust)
+            fact_checker_trust = agent_trust
+            fact_checker_trust *= (n_FC / n_total) if n_total > 0 else 0
 
-            else: # Equal numbers of Believers and FactCheckers
-                pass
+            f_B *= (1 + agent_anger - agent_education + believer_trust)
+            f_FC *= (1 - agent_anger + agent_education + fact_checker_trust)
 
             # After adjustments, normalize f_B & f_FC, to ensure their sum doesn't exceed 1:
             total = f_B + f_FC
@@ -123,33 +196,31 @@ for step in range(NUM_STEPS):
                 f_B /= total
                 f_FC /= total
 
-            # Decide state change
-            if np.random.rand() < f_B:
-                updated_agents[index].set_state(AgentState.BELIEVER)
+            temp_rand = np.random.rand()
 
-            elif np.random.rand() < f_FC: # TODO check this transition to be correct or not
+            # Decide state change
+            if temp_rand < f_B and f_B >= f_FC:
+                updated_agents[index].set_state(AgentState.BELIEVER)
+                s_to_b_count += 1
+
+            elif temp_rand < f_FC:
                 updated_agents[index].set_state(AgentState.FACT_CHECKER)
+                s_to_fc_count += 1
 
         elif agent.get_state() == AgentState.BELIEVER:  # Believer
             n_B = count_neighbors_in_state(agent, AgentState.BELIEVER)
             n_FC = count_neighbors_in_state(agent, AgentState.FACT_CHECKER)
+            n_total = n_B + n_FC
 
-            pv = None # Verification probability
+            pv = agent_education - agent_anger # Verification probability
 
-            # Modify the probabilities based on the majority state of neighbors
-            if n_B > n_FC:
-                pv = agent_education - agent_anger - agent_trust
-
-            elif n_FC > n_B:
-                pv = agent_education - agent_anger + agent_trust
-
-            else:  # Equal numbers of Believers and FactCheckers
-                pv = agent_education - agent_anger
+            pv += (1 - α) * (agent_trust * (n_FC - n_B)) / n_total
 
             pv = pv if pv > 0 else 0
 
             if np.random.rand() < pv:
                 updated_agents[index].set_state(AgentState.FACT_CHECKER)  # Verify the hoax
+                b_to_fc_count += 1
 
             elif np.random.rand() < pf:
                 updated_agents[index].set_state(AgentState.SUSCEPTIBLE)  # Forget and become Susceptible
@@ -158,9 +229,17 @@ for step in range(NUM_STEPS):
             if np.random.rand() < pf:
                 updated_agents[index].set_state(AgentState.SUSCEPTIBLE)  # Forget and become Susceptible
 
+    print(f's -> b: {s_to_b_count}, s -> fc: {s_to_fc_count}, b -> fc: {b_to_fc_count}\n')
+
     # Update the states of the agents
     agents = updated_agents.copy()
 
     draw_social_network_graph(agents, social_network, step)
 
-    print_agent_states(agents)
+    s, b, fc = count_agent_states(agents)
+
+    susceptible.append(s)
+    believers.append(b)
+    fact_checkers.append(fc)
+
+plot_agent_states(susceptible, believers, fact_checkers)

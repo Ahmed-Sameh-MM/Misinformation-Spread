@@ -7,7 +7,8 @@ class AgentSocioEmotionalClasses:
         self.anger = anger
 
         if trust is None:
-            self.trust = round((anger + education) / 2)
+            self.trust = (anger + education) / 2
+
         else:
             self.trust = trust
 
