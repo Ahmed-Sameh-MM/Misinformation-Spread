@@ -6,7 +6,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from agent import Agent
-from agent_state import AgentState
 from agent_socio_emotional_classes import *
 from constants import *
 
@@ -26,17 +25,23 @@ def draw_social_network_graph(agents:List[Agent], social_network, step: int):
         plt.title(f"Step {step + 1}", fontsize=15)
         plt.show()
 
-def plot_agent_states(susceptible: List[AgentState], believers: List[AgentState], fact_checkers: List[AgentState]):
+def plot_agent_states(susceptible: List[int], believers: List[int], fact_checkers: List[int]):
     simulation_steps = [step for step in range(NUM_STEPS + 1)]
 
+    total = susceptible[-1] + believers[-1] + fact_checkers[-1]
+
+    susceptible_percentage = f'Susceptible = {round(susceptible[-1] / total * 100, 3)}%'
+    believers_percentage = f'Believers = {round(believers[-1] / total * 100, 3)}%'
+    fact_checkers_percentage = f'Fact Checkers = {round(fact_checkers[-1] / total * 100, 3)}%'
+
     plt.figure(figsize=(10, 6))
-    plt.plot(simulation_steps, susceptible, label="Susceptible", color="gray", linestyle="--")
-    plt.plot(simulation_steps, believers, label="Believers", color="red", linestyle="-")
-    plt.plot(simulation_steps, fact_checkers, label="Fact Checkers", color="green", linestyle=":")
+    plt.plot(simulation_steps, susceptible, label=susceptible_percentage, color="gray", linestyle="--")
+    plt.plot(simulation_steps, believers, label=believers_percentage, color="red", linestyle="-")
+    plt.plot(simulation_steps, fact_checkers, label=fact_checkers_percentage, color="green", linestyle=":")
 
     plt.xlabel("Simulation Steps")
     plt.ylabel("Number of Agent States")
-    plt.title("Graph of Simulation Steps vs Number of Agent States")
+    plt.title(f"α={α}, High_Edu&Emo={SOCIO_EMOTIONAL_CLASSES_PERCENTAGES['HighEducationHighEmotional']}%, Low_Edu&Emo={SOCIO_EMOTIONAL_CLASSES_PERCENTAGES['LowEducationLowEmotional']}%, High_Edu_Low_Emo={SOCIO_EMOTIONAL_CLASSES_PERCENTAGES['HighEducationLowEmotional']}%, Low_Edu_High_Emo={SOCIO_EMOTIONAL_CLASSES_PERCENTAGES['LowEducationHighEmotional']}%")
     plt.legend()
 
     # Adding grid for better readability
@@ -50,6 +55,8 @@ def count_agent_states(agents: List[Agent]):
     believers = 0
     fact_checkers = 0
 
+    total = len(agents)
+
     for agent in agents:
         if agent.get_state() == AgentState.SUSCEPTIBLE:
             susceptible += 1
@@ -60,15 +67,16 @@ def count_agent_states(agents: List[Agent]):
         elif agent.get_state() == AgentState.FACT_CHECKER:
             fact_checkers += 1
 
-    print(f'Susceptible: {susceptible}, believers: {believers}, fact_checkers: {fact_checkers}')
+    susceptible_percentage = f'{round(susceptible / total * 100, 2)}%'
+    believers_percentage = f'{round(believers / total * 100, 2)}%'
+    fact_checkers_percentage = f'{round(fact_checkers / total * 100, 2)}%'
+
+    print(f'Susceptible: {susceptible_percentage} ({susceptible}), believers: {believers_percentage} ({believers}), fact_checkers: {fact_checkers_percentage} ({fact_checkers})')
 
     return susceptible, believers, fact_checkers
 
 # Initialize the network
-# social_network = nx.barabasi_albert_graph(NUM_AGENTS, 3)
 social_network = nx.Graph()
-
-# print(social_network.nodes())
 
 # Add NUM_PEOPLE as agents
 agents = []
@@ -138,14 +146,25 @@ for agent in agents:
             social_network.add_edge(agent, connection)
 
 # Seed the network with initial believers
-initial_believers = np.random.choice(list(agents), size=NUM_OF_INITIAL_BELIEVERS, replace=False)
+initial_believers = np.random.choice(agents, size=NUM_OF_INITIAL_BELIEVERS, replace=False)
 
 for believer in initial_believers:
     agents[believer.id].set_state(AgentState.BELIEVER)
 
+if ADD_FACT_CHECKERS:
+    # Ensure that we have exactly 10% fact_checkers
+    # Exclude initial believers from the list of potential fact_checkers
+    non_believers = [agent for agent in agents if agent not in initial_believers]
+
+    # Seed the network with initial fact-checkers
+    initial_fact_checkers = np.random.choice(non_believers, size=NUM_OF_INITIAL_BELIEVERS, replace=False)
+
+    for fact_checker in initial_fact_checkers:
+        agents[fact_checker.id].set_state(AgentState.FACT_CHECKER)
+
 # Display basic graph info
 print("Number of Agents:", social_network.number_of_nodes(), ',' ,end = ' ')
-print("Number of Connections:", social_network.number_of_edges())
+print("Number of Connections:", social_network.number_of_edges(), '\n')
 
 s, b, fc = count_agent_states(agents)
 

@@ -1,11 +1,6 @@
 from agent_state import AgentState
 from agent_socio_emotional_classes import AgentSocioEmotionalClasses
-
-node_colors = {
-    AgentState.SUSCEPTIBLE: "gray",
-    AgentState.BELIEVER: "red",
-    AgentState.FACT_CHECKER: "green",
-}
+from constants import *
 
 class Agent:
     def __init__(self, id: int, socio_emotional_class: AgentSocioEmotionalClasses, state: AgentState=AgentState.SUSCEPTIBLE):
